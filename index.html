@@ -264,16 +264,9 @@
             const X = math.matrix(x.map(row => [1, ...row]));
             const Y = math.matrix(y);
             const XT = math.transpose(X);
-            try {
-                // Use lusolve for solving linear systems that might be singular
-                const coeffs = math.lusolve(math.multiply(XT, X), math.multiply(XT, Y));
-                return coeffs.toArray();
-            } catch (e) {
-                console.error('Matrix is singular, using fallback method:', e);
-                return math.pinv(math.multiply(XT, X)).map(row => math.multiply(row, math.multiply(XT, Y)));
-            }
+            const coeffs = math.multiply(math.inv(math.multiply(XT, X)), math.multiply(XT, Y)).toArray();
+            return coeffs;
         }
-
 
         function polynomialFit(x, y, degree) {
             const X = x.map(row => {
@@ -286,17 +279,9 @@
                 return [1, ...terms];
             });
             const XT = math.transpose(X);
-            try {
-                // Use lusolve for solving linear systems that might be singular
-                const coeffs = math.lusolve(math.multiply(XT, X), math.multiply(XT, y));
-                return coeffs.toArray().flat();
-            } catch (e) {
-                console.error('Matrix is singular, using fallback method:', e);
-                return math.pinv(math.multiply(XT, X)).map(row => math.multiply(row, math.multiply(XT, y)));
-            }
+            const coeffs = math.multiply(math.inv(math.multiply(XT, X)), math.multiply(XT, y)).toArray();
+            return coeffs;
         }
-
-
 
         function exponentialFit(x, y) {
             const logY = y.map(yi => Math.log(yi));
@@ -352,32 +337,6 @@
             const std2 = math.std(arr2);
             return cov / (std1 * std2);
         };
-
-        math.pinv = function(matrix) {
-            const [Q, R] = qrDecomposition(matrix);
-            const R_inv = math.inv(R);
-            return math.multiply(R_inv, math.transpose(Q));
-        };
-
-        function qrDecomposition(matrix) {
-            const m = matrix.length;
-            const n = matrix[0].length;
-            const Q = math.identity(m);
-            const R = math.clone(matrix);
-            for (let i = 0; i < n; i++) {
-                const norm = math.norm(R.map(row => row[i]).slice(i, m), 2);
-                const sign = R[i][i] >= 0 ? 1 : -1;
-                R[i][i] += sign * norm;
-                const u = R.map((row, k) => (k < i ? 0 : row[i] / R[i][i]));
-                const uTu = math.dot(u, u);
-                const H = math.subtract(math.identity(m), math.multiply(2 / uTu, math.outer(u, u)));
-                R = math.multiply(H, R);
-                Q = math.multiply(Q, H);
-            }
-            return [Q, R];
-        }
-
-
     </script>
 </body>
 </html>
