@@ -2,341 +2,209 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Data Scientist Survival Calculator</title>
+    <title>Linear Regression Tool</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #f7f7f7;
-            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f4f9;
             margin: 0;
-            padding: 0;
-        }
-        header {
-            background-color: #4CAF50;
-            color: white;
-            text-align: center;
-            padding: 1em;
-        }
-        .container {
-            width: 80%;
-            margin: auto;
             padding: 20px;
         }
-        input, textarea {
+        h1 {
+            color: #333;
+        }
+        p {
+            color: #555;
+        }
+        textarea {
             width: 100%;
+            max-width: 600px;
             padding: 10px;
             margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            resize: none;
+        }
+        input[type="number"] {
+            width: 100px;
+            padding: 5px;
+            margin: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
         }
         button {
-            padding: 10px;
-            background-color: #4CAF50;
-            color: white;
+            padding: 10px 20px;
+            margin: 10px;
             border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
             cursor: pointer;
-            width: 100%;
+            transition: background-color 0.3s;
         }
         button:hover {
-            background-color: #45a049;
+            background-color: #0056b3;
         }
-        table {
+        #graph-container {
+            position: relative;
             width: 100%;
+            max-width: 600px;
+            height: 400px;
             margin-top: 20px;
-            border-collapse: collapse;
-        }
-        table, th, td {
-            border: 1px solid black;
-            padding: 10px;
-            text-align: left;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: white;
         }
         canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #results {
+            text-align: center;
             margin-top: 20px;
-            width: 100%;
-            height: 400px;
+        }
+        #regressionFunction, #r2Error {
+            color: #007bff;
+            font-weight: bold;
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/10.1.1/math.min.js"></script>
 </head>
 <body>
-    <header>
-        <h1>Data Scientist Survival Calculator</h1>
-    </header>
-    <div class="container">
-        <h2>Upload Data</h2>
-        <input type="file" id="fileInput" accept=".csv">
-        <h2>Or Paste Data (comma-separated)</h2>
-        <textarea id="textInput" rows="10" placeholder="Enter data here..."></textarea>
-        <button onclick="loadData()">Load Data</button>
-        <h2>Data Table</h2>
-        <div id="dataTable"></div>
-        <h2>Choose Analysis</h2>
-        <select id="analysisType">
-            <option value="scatter">Scatter Plot</option>
-            <option value="line">Line Chart</option>
-            <option value="bar">Bar Chart</option>
-            <option value="stats">Summary Statistics</option>
-            <option value="corr">Correlation Matrix</option>
-            <option value="linear">Linear Regression</option>
-            <option value="polynomial">Polynomial Regression</option>
-            <option value="exponential">Exponential Fit</option>
-            <option value="pca">PCA</option>
-        </select>
-        <button onclick="analyzeData()">Analyze Data</button>
-        <canvas id="chart"></canvas>
-        <h2>Model Evaluation</h2>
-        <div id="modelEvaluation"></div>
-        <h2>Download Results</h2>
-        <button onclick="downloadResults()">Download Results</button>
+    <h1>Linear Regression Tool</h1>
+    <p>Enter your data below:</p>
+    <textarea id="dataInput" rows="10" placeholder="x1, x2, x3, ..., y&#10;1, 2, 3, ..., 10&#10;2, 3, 4, ..., 20&#10;3, 4, 5, ..., 30&#10;4, 5, 6, ..., 40&#10;5, 6, 7, ..., 50"></textarea><br>
+    <div>
+        <label for="learningRate">Learning Rate:</label>
+        <input type="number" id="learningRate" value="0.01" step="0.001">
+        <label for="iterations">Iterations:</label>
+        <input type="number" id="iterations" value="1000" step="100">
+    </div>
+    <button onclick="calculateRegression()">Calculate Regression</button>
+    <button onclick="loadSampleData()">Load Sample Data</button>
+    <div id="graph-container">
+        <canvas id="graphBackground" width="600" height="400"></canvas>
+        <canvas id="actualVsPredicted" width="600" height="400"></canvas>
+    </div>
+    <div id="results">
+        <p id="regressionFunction"></p>
+        <p id="r2Error"></p>
     </div>
 
     <script>
-        let data = [];
-        let chart;
-
-        function loadData() {
-            const fileInput = document.getElementById('fileInput');
-            const textInput = document.getElementById('textInput');
-
-            if (fileInput.files.length > 0) {
-                const reader = new FileReader();
-                reader.onload = function(event) {
-                    data = event.target.result.split('\n').map(row => row.split(',').map(Number));
-                    displayTable(data);
-                };
-                reader.readAsText(fileInput.files[0]);
-            } else {
-                data = textInput.value.split('\n').map(row => row.split(',').map(Number));
-                displayTable(data);
-            }
+        function loadSampleData() {
+            const sampleData = `1, 2, 3, 10\n2, 3, 4, 20\n3, 4, 5, 30\n4, 5, 6, 40\n5, 6, 7, 50`;
+            document.getElementById('dataInput').value = sampleData;
         }
 
-        function displayTable(data) {
-            const dataTable = document.getElementById('dataTable');
-            dataTable.innerHTML = '<table><thead><tr>' +
-                data[0].map((_, i) => `<th>Column ${i + 1}</th>`).join('') +
-                '</tr></thead><tbody>' +
-                data.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('') +
-                '</tbody></table>';
-        }
-
-        function analyzeData() {
-            const analysisType = document.getElementById('analysisType').value;
-            const chartContext = document.getElementById('chart').getContext('2d');
-            const modelEvaluation = document.getElementById('modelEvaluation');
-            modelEvaluation.innerHTML = '';
-
-            if (chart) {
-                chart.destroy();
+        function calculateRegression() {
+            const dataInput = document.getElementById('dataInput').value.trim();
+            if (!dataInput) {
+                alert('Please input data in the textarea.');
+                return;
             }
 
-            if (analysisType === 'stats') {
-                displayStats();
-            } else if (analysisType === 'corr') {
-                displayCorrelation();
-            } else if (analysisType === 'pca') {
-                displayPCA();
-            } else {
-                const xData = data.map(row => row.slice(0, -1));
-                const yData = data.map(row => row.slice(-1)[0]);
+            const learningRate = parseFloat(document.getElementById('learningRate').value);
+            const iterations = parseInt(document.getElementById('iterations').value, 10);
 
-                chart = new Chart(chartContext, {
-                    type: 'scatter',
-                    data: {
-                        datasets: [{
-                            label: 'Data',
-                            data: xData.map((x, i) => ({ x: x[0], y: yData[i] })),  // Plot only the first feature
-                            borderColor: 'rgba(75, 192, 192, 1)',
-                            backgroundColor: 'rgba(75, 192, 192, 0.2)'
-                        }]
-                    },
-                    options: {
-                        scales: {
-                            x: { type: 'linear', position: 'bottom' },
-                            y: { type: 'linear' }
-                        }
+            const rows = dataInput.split('\n').map(row => row.split(',').map(Number));
+            const X = rows.map(row => [1, ...row.slice(0, -1)]); // Add a column of 1s for the intercept
+            const y = rows.map(row => row[row.length - 1]);
+
+            const beta = gradientDescent(X, y, learningRate, iterations);
+
+            displayRegressionFunction(beta);
+            displayActualVsPredicted(X, y, beta);
+            displayR2Error(X, y, beta);
+        }
+
+        function gradientDescent(X, y, learningRate = 0.01, iterations = 1000) {
+            const m = y.length;
+            let beta = Array(X[0].length).fill(0);
+
+            for (let iter = 0; iter < iterations; iter++) {
+                const predictions = X.map(row => beta.reduce((sum, b, i) => sum + b * row[i], 0));
+                const errors = predictions.map((pred, i) => pred - y[i]);
+
+                for (let j = 0; j < beta.length; j++) {
+                    let gradient = 0;
+                    for (let i = 0; i < m; i++) {
+                        gradient += errors[i] * X[i][j];
                     }
-                });
-
-                if (['linear', 'polynomial', 'exponential'].includes(analysisType)) {
-                    fitModel(analysisType, xData, yData);
+                    beta[j] -= (learningRate / m) * gradient;
                 }
             }
+
+            return beta;
         }
 
-        function displayStats() {
-            const stats = data[0].map((_, i) => {
-                const col = data.map(row => row[i]);
-                return {
-                    mean: math.mean(col),
-                    median: math.median(col),
-                    mode: math.mode(col),
-                    variance: math.var(col),
-                    stdDev: math.std(col)
-                };
-            });
-            const modelEvaluation = document.getElementById('modelEvaluation');
-            modelEvaluation.innerHTML = '<h3>Summary Statistics</h3>' +
-                stats.map((stat, i) => `
-                    <p><strong>Column ${i + 1}</strong></p>
-                    <p>Mean: ${stat.mean}</p>
-                    <p>Median: ${stat.median}</p>
-                    <p>Mode: ${stat.mode}</p>
-                    <p>Variance: ${stat.variance}</p>
-                    <p>Standard Deviation: ${stat.stdDev}</p>
-                `).join('');
+        function displayRegressionFunction(beta) {
+            const roundedBeta = beta.map(b => Math.round(b * 1000) / 1000);
+            document.getElementById('regressionFunction').innerText = 'Regression function: y = ' +
+                roundedBeta.map((b, i) => (i === 0 ? b : `${b >= 0 ? '+ ' : '- '}${Math.abs(b)}x${i}`)).join(' ');
         }
 
-        function displayCorrelation() {
-            const n = data[0].length;
-            const corrMatrix = Array.from({ length: n }, () => Array(n).fill(0));
-            for (let i = 0; i < n; i++) {
-                for (let j = 0; j < n; j++) {
-                    corrMatrix[i][j] = math.corr(data.map(row => row[i]), data.map(row => row[j]));
-                }
+        function displayActualVsPredicted(X, y, beta) {
+            const ctxBackground = document.getElementById('graphBackground').getContext('2d');
+            const ctx = document.getElementById('actualVsPredicted').getContext('2d');
+            ctx.clearRect(0, 0, 600, 400);
+            ctxBackground.clearRect(0, 0, 600, 400);
+
+            const actual = y;
+            const predicted = X.map(row => beta.reduce((sum, b, i) => sum + b * row[i], 0));
+            const maxActual = Math.max(...actual);
+            const maxPredicted = Math.max(...predicted);
+            const maxY = Math.max(maxActual, maxPredicted);
+
+            // Draw axes and labels
+            ctxBackground.beginPath();
+            ctxBackground.strokeStyle = 'black';
+            ctxBackground.moveTo(50, 0);
+            ctxBackground.lineTo(50, 400);
+            ctxBackground.lineTo(600, 400);
+            ctxBackground.stroke();
+
+            for (let i = 0; i <= 5; i++) {
+                const y = 400 - (i * 80);
+                ctxBackground.fillText((maxY * i / 5).toFixed(2), 10, y);
+                ctxBackground.moveTo(45, y);
+                ctxBackground.lineTo(55, y);
             }
-            const modelEvaluation = document.getElementById('modelEvaluation');
-            modelEvaluation.innerHTML = '<h3>Correlation Matrix</h3><table><tbody>' +
-                corrMatrix.map(row => '<tr>' + row.map(cell => `<td>${cell.toFixed(2)}</td>`).join('') + '</tr>').join('') +
-                '</tbody></table>';
-        }
+            ctxBackground.stroke();
 
-        function displayPCA() {
-            const pcaData = data.map(row => row.slice(0, -1));
-            const pca = new PCA();
-            const transformed = pca.fit(pcaData).transform(pcaData, 2);
-
-            chart = new Chart(document.getElementById('chart'), {
-                type: 'scatter',
-                data: {
-                    datasets: [{
-                        label: 'PCA',
-                        data: transformed.map((d, i) => ({ x: d[0], y: d[1], label: i })),
-                        backgroundColor: 'rgba(153, 102, 255, 1)',
-                        borderColor: 'rgba(153, 102, 255, 1)',
-                        pointRadius: 5
-                    }]
-                },
-                options: {
-                    scales: {
-                        x: { type: 'linear', position: 'bottom' },
-                        y: { type: 'linear' }
-                    },
-                    plugins: {
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return `Sample ${context.raw.label}: (${context.raw.x.toFixed(2)}, ${context.raw.y.toFixed(2)})`;
-                                }
-                            }
-                        }
-                    }
-                }
+            ctx.beginPath();
+            ctx.strokeStyle = 'blue';
+            ctx.moveTo(50, 400 - (actual[0] / maxY * 400));
+            actual.forEach((a, i) => {
+                const x = 50 + i * (550 / (actual.length - 1));
+                const y = 400 - (a / maxY * 400);
+                ctx.lineTo(x, y);
             });
-        }
+            ctx.stroke();
 
-        function fitModel(type, xData, yData) {
-            let fit;
-            if (type === 'linear') {
-                const linFit = linearFit(xData, yData);
-                fit = xData.map(x => linFit.reduce((acc, coeff, i) => acc + coeff * x[i], 0));
-                displayModelEvaluation(linFit, yData, fit);
-            } else if (type === 'polynomial') {
-                const polyFit = polynomialFit(xData, yData, 2); // Degree 2
-                fit = xData.map(x => polyFit.reduce((acc, coeff, i) => acc + coeff * Math.pow(x[0], i), 0));
-                displayModelEvaluation(polyFit, yData, fit, 'polynomial');
-            } else if (type === 'exponential') {
-                const expFit = exponentialFit(xData.map(x => x[0]), yData);
-                fit = xData.map(x => expFit.a * Math.exp(expFit.b * x[0]));
-                displayModelEvaluation(expFit, yData, fit, 'exponential');
-            }
-            chart.data.datasets.push({
-                label: `${type.charAt(0).toUpperCase() + type.slice(1)} Fit`,
-                data: xData.map((x, i) => ({ x: x[0], y: fit[i] })),  // Plot only the first feature
-                type: 'line',
-                borderColor: 'rgba(255, 99, 132, 1)',
-                backgroundColor: 'rgba(255, 99, 132, 0.2)'
+            ctx.beginPath();
+            ctx.strokeStyle = 'red';
+            ctx.moveTo(50, 400 - (predicted[0] / maxY * 400));
+            predicted.forEach((p, i) => {
+                const x = 50 + i * (550 / (predicted.length - 1));
+                const y = 400 - (p / maxY * 400);
+                ctx.lineTo(x, y);
             });
-            chart.update();
+            ctx.stroke();
         }
 
-        function linearFit(x, y) {
-            const X = math.matrix(x.map(row => [1, ...row]));
-            const Y = math.matrix(y);
-            const XT = math.transpose(X);
-            const coeffs = math.multiply(math.inv(math.multiply(XT, X)), math.multiply(XT, Y)).toArray();
-            return coeffs;
+        function displayR2Error(X, y, beta) {
+            const predictions = X.map(row => beta.reduce((sum, b, i) => sum + b * row[i], 0));
+            const ssResidual = y.reduce((sum, actual, i) => sum + Math.pow(actual - predictions[i], 2), 0);
+            const meanY = y.reduce((sum, val) => sum + val, 0) / y.length;
+            const ssTotal = y.reduce((sum, actual) => sum + Math.pow(actual - meanY, 2), 0);
+            const r2 = 1 - (ssResidual / ssTotal);
+
+            document.getElementById('r2Error').innerText = `R² Error: ${r2.toFixed(3)}`;
         }
-
-        function polynomialFit(x, y, degree) {
-            const X = x.map(row => {
-                const terms = [];
-                for (let d = 0; d <= degree; d++) {
-                    for (let i = 0; i < row.length; i++) {
-                        terms.push(Math.pow(row[i], d));
-                    }
-                }
-                return [1, ...terms];
-            });
-            const XT = math.transpose(X);
-            const coeffs = math.multiply(math.inv(math.multiply(XT, X)), math.multiply(XT, y)).toArray();
-            return coeffs;
-        }
-
-        function exponentialFit(x, y) {
-            const logY = y.map(yi => Math.log(yi));
-            const linFit = linearFit(x.map(xi => [xi]), logY);
-            return { a: Math.exp(linFit[0][0]), b: linFit[1][0] };
-        }
-
-        function displayModelEvaluation(model, actual, predicted, type = 'linear') {
-            const rSquared = math.rSquared(actual, predicted);
-            const rmse = math.sqrt(math.mean(math.subtract(actual, predicted).map(e => e ** 2)));
-            const modelEvaluation = document.getElementById('modelEvaluation');
-            modelEvaluation.innerHTML = `
-                <h3>Model Evaluation</h3>
-                <p><strong>${type.charAt(0).toUpperCase() + type.slice(1)} Model</strong></p>
-                <p>R-Squared: ${rSquared.toFixed(4)}</p>
-                <p>RMSE: ${rmse.toFixed(4)}</p>
-            `;
-        }
-
-        function downloadResults() {
-            const csvData = data.map(row => row.join(',')).join('\n');
-            const blob = new Blob([csvData], { type: 'text/csv' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = 'results.csv';
-            link.click();
-        }
-
-        math.polyfit = function(x, y, degree) {
-            const X = math.matrix(x.map(xi => math.range(0, degree + 1).toArray().map(d => xi ** d)));
-            const Y = math.matrix(y);
-            const XT = math.transpose(X);
-            const coeffs = math.multiply(math.inv(math.multiply(XT, X)), math.multiply(XT, Y));
-            return coeffs._data.flat();
-        };
-
-        math.rSquared = function(actual, predicted) {
-            const ssRes = math.sum(math.subtract(actual, predicted).map(e => e ** 2));
-            const ssTot = math.sum(math.subtract(actual, math.mean(actual)).map(e => e ** 2));
-            return 1 - ssRes / ssTot;
-        };
-
-        math.var = function(arr) {
-            const mean = math.mean(arr);
-            return math.mean(arr.map(num => (num - mean) ** 2));
-        };
-
-        math.corr = function(arr1, arr2) {
-            const mean1 = math.mean(arr1);
-            const mean2 = math.mean(arr2);
-            const cov = math.mean(arr1.map((num, i) => (num - mean1) * (arr2[i] - mean2)));
-            const std1 = math.std(arr1);
-            const std2 = math.std(arr2);
-            return cov / (std1 * std2);
-        };
     </script>
 </body>
 </html>
