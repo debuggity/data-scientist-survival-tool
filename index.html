@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Linear Regression Tool</title>
+    <title>Regression Tool</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -28,7 +28,7 @@
             border-radius: 5px;
             resize: none;
         }
-        input[type="number"] {
+        input[type="number"], select {
             width: 100px;
             padding: 5px;
             margin: 10px;
@@ -74,14 +74,21 @@
     </style>
 </head>
 <body>
-    <h1>Linear Regression Tool</h1>
+    <h1>Regression Tool</h1>
     <p>Enter your data below:</p>
     <textarea id="dataInput" rows="10" placeholder="x1, x2, x3, ..., y&#10;1, 2, 3, ..., 10&#10;2, 3, 4, ..., 20&#10;3, 4, 5, ..., 30&#10;4, 5, 6, ..., 40&#10;5, 6, 7, ..., 50"></textarea><br>
     <div>
         <label for="learningRate">Learning Rate:</label>
-        <input type="number" id="learningRate" value="0.015" step="0.001">
+        <input type="number" id="learningRate" value="0.01" step="0.001">
         <label for="iterations">Iterations:</label>
-        <input type="number" id="iterations" value="2000" step="100">
+        <input type="number" id="iterations" value="1000" step="100">
+        <label for="modelType">Model Type:</label>
+        <select id="modelType">
+            <option value="linear">Linear Regression</option>
+            <option value="polynomial">Polynomial Regression</option>
+        </select>
+        <label for="degree" id="degreeLabel" style="display: none;">Degree:</label>
+        <input type="number" id="degree" value="2" min="2" style="display: none;">
     </div>
     <button onclick="calculateRegression()">Calculate Regression</button>
     <button onclick="loadSampleData()">Load Sample Data</button>
@@ -95,6 +102,18 @@
     </div>
 
     <script>
+        document.getElementById('modelType').addEventListener('change', function() {
+            const degreeLabel = document.getElementById('degreeLabel');
+            const degreeInput = document.getElementById('degree');
+            if (this.value === 'polynomial') {
+                degreeLabel.style.display = 'inline';
+                degreeInput.style.display = 'inline';
+            } else {
+                degreeLabel.style.display = 'none';
+                degreeInput.style.display = 'none';
+            }
+        });
+
         function loadSampleData() {
             const sampleData = `1, 2, 3, 10\n2, 3, 4, 20\n3, 4, 5, 30\n4, 5, 6, 40\n5, 6, 7, 50`;
             document.getElementById('dataInput').value = sampleData;
@@ -109,16 +128,54 @@
 
             const learningRate = parseFloat(document.getElementById('learningRate').value);
             const iterations = parseInt(document.getElementById('iterations').value, 10);
+            const modelType = document.getElementById('modelType').value;
+            const degree = parseInt(document.getElementById('degree').value, 10);
 
             const rows = dataInput.split('\n').map(row => row.split(',').map(Number));
-            const X = rows.map(row => [1, ...row.slice(0, -1)]); // Add a column of 1s for the intercept
+            let X = rows.map(row => row.slice(0, -1)); // Exclude the output column for X
             const y = rows.map(row => row[row.length - 1]);
 
-            const beta = gradientDescent(X, y, learningRate, iterations);
+            // Normalize the data
+            const { X_norm, y_norm, X_mean, X_std, y_mean, y_std } = normalizeData(X, y);
 
-            displayRegressionFunction(beta);
-            displayActualVsPredicted(X, y, beta);
-            displayR2Error(X, y, beta);
+            if (modelType === 'polynomial') {
+                X = polynomialFeatures(X_norm, degree);
+            } else {
+                X = X_norm;
+            }
+
+            // Add a column of 1s for the intercept
+            X = X.map(row => [1, ...row]);
+
+            const beta = gradientDescent(X, y_norm, learningRate, iterations);
+
+            displayRegressionFunction(beta, modelType, degree, X_mean, X_std, y_mean, y_std);
+            displayActualVsPredicted(X, y, beta, X_mean, X_std, y_mean, y_std, modelType, degree);
+            displayR2Error(X, y_norm, beta);
+        }
+
+        function normalizeData(X, y) {
+            const X_mean = X[0].map((_, colIndex) => X.map(row => row[colIndex]).reduce((a, b) => a + b) / X.length);
+            const X_std = X[0].map((_, colIndex) => Math.sqrt(X.map(row => Math.pow(row[colIndex] - X_mean[colIndex], 2)).reduce((a, b) => a + b) / X.length));
+            const y_mean = y.reduce((a, b) => a + b) / y.length;
+            const y_std = Math.sqrt(y.map(val => Math.pow(val - y_mean, 2)).reduce((a, b) => a + b) / y.length);
+
+            const X_norm = X.map(row => row.map((val, colIndex) => (val - X_mean[colIndex]) / X_std[colIndex]));
+            const y_norm = y.map(val => (val - y_mean) / y_std);
+
+            return { X_norm, y_norm, X_mean, X_std, y_mean, y_std };
+        }
+
+        function polynomialFeatures(X, degree) {
+            return X.map(row => {
+                let newRow = [];
+                for (let d = 1; d <= degree; d++) {
+                    for (let i = 0; i < row.length; i++) {
+                        newRow.push(Math.pow(row[i], d));
+                    }
+                }
+                return newRow;
+            });
         }
 
         function gradientDescent(X, y, learningRate = 0.01, iterations = 1000) {
@@ -141,20 +198,41 @@
             return beta;
         }
 
-        function displayRegressionFunction(beta) {
-            const roundedBeta = beta.map(b => Math.round(b * 1000) / 1000);
-            document.getElementById('regressionFunction').innerText = 'Regression function: y = ' +
-                roundedBeta.map((b, i) => (i === 0 ? b : `${b >= 0 ? '+ ' : '- '}${Math.abs(b)}x${i}`)).join(' ');
+        function displayRegressionFunction(beta, modelType, degree, X_mean, X_std, y_mean, y_std) {
+            // Denormalize the bias term correctly
+            const denormBeta = beta.map((b, i) => {
+                if (i === 0) {
+                    return b * y_std + y_mean - beta.slice(1).reduce((sum, b, j) => sum + b * X_mean[j % X_mean.length] / X_std[j % X_std.length], 0) * y_std;
+                } else {
+                    return b * y_std / X_std[(i - 1) % X_std.length];
+                }
+            });
+
+            const roundedBeta = denormBeta.map(b => Math.round(b * 1000) / 1000);
+            if (modelType === 'linear') {
+                document.getElementById('regressionFunction').innerText = 'Regression function: y = ' +
+                    roundedBeta.map((b, i) => (i === 0 ? b : `${b >= 0 ? '+ ' : '- '}${Math.abs(b)}x${i}`)).join(' ');
+            } else {
+                let terms = [];
+                let index = 1;
+                for (let d = 1; d <= degree; d++) {
+                    for (let j = 0; j < (roundedBeta.length - 1) / degree; j++) {
+                        terms.push(`${roundedBeta[index]}x${j + 1}^${d}`);
+                        index++;
+                    }
+                }
+                document.getElementById('regressionFunction').innerText = `Polynomial regression function: y = ${roundedBeta[0]} + ${terms.join(' + ')}`;
+            }
         }
 
-        function displayActualVsPredicted(X, y, beta) {
+        function displayActualVsPredicted(X, y, beta, X_mean, X_std, y_mean, y_std, modelType, degree) {
             const ctxBackground = document.getElementById('graphBackground').getContext('2d');
             const ctx = document.getElementById('actualVsPredicted').getContext('2d');
             ctx.clearRect(0, 0, 600, 400);
             ctxBackground.clearRect(0, 0, 600, 400);
 
             const actual = y;
-            const predicted = X.map(row => beta.reduce((sum, b, i) => sum + b * row[i], 0));
+            const predicted = X.map(row => beta.reduce((sum, b, i) => sum + b * row[i], 0) * y_std + y_mean);
             const maxActual = Math.max(...actual);
             const maxPredicted = Math.max(...predicted);
             const maxY = Math.max(maxActual, maxPredicted);
@@ -196,11 +274,11 @@
             ctx.stroke();
         }
 
-        function displayR2Error(X, y, beta) {
+        function displayR2Error(X, y_norm, beta) {
             const predictions = X.map(row => beta.reduce((sum, b, i) => sum + b * row[i], 0));
-            const ssResidual = y.reduce((sum, actual, i) => sum + Math.pow(actual - predictions[i], 2), 0);
-            const meanY = y.reduce((sum, val) => sum + val, 0) / y.length;
-            const ssTotal = y.reduce((sum, actual) => sum + Math.pow(actual - meanY, 2), 0);
+            const ssResidual = y_norm.reduce((sum, actual, i) => sum + Math.pow(actual - predictions[i], 2), 0);
+            const meanY = y_norm.reduce((sum, val) => sum + val, 0) / y_norm.length;
+            const ssTotal = y_norm.reduce((sum, actual) => sum + Math.pow(actual - meanY, 2), 0);
             const r2 = 1 - (ssResidual / ssTotal);
 
             document.getElementById('r2Error').innerText = `R² Error: ${r2.toFixed(3)}`;
